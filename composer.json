@@ -8,7 +8,7 @@
     "license": "GPL-3.0",
     "autoload": {
         "psr-4": {
-            "Detain\\Sshpool\\": "src/"
+            "Detain\\SshPool\\": "src/"
         }
     },
     "authors": [

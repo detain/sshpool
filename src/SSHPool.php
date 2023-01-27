@@ -4,13 +4,13 @@
 *
 * @author Joe Huss <detain@interserver.net>
 * @copyright 2023
-* @package   SSHPool
+* @package   SshPool
 * @category  SSH
 */
 
 namespace Detain;
 
-class SSHPool
+class SshPool
 {
     protected static $user = 'root';
     protected static $pass = '';
@@ -85,8 +85,8 @@ class SSHPool
             ]
         ];
         $callbacks = [
-            'debug' => ['Detain\SSHPool','debugCallback'],
-            'disconnect' => ['Detain\SSHPool', 'disconnectCallback']
+            'debug' => ['Detain\SshPool','debugCallback'],
+            'disconnect' => ['Detain\SshPool', 'disconnectCallback']
         ];
         // determine connections needed
         $totalConnections = count(self::$queue) > self::$maxConnections ? self::$maxConnections : count(self::$queue);
