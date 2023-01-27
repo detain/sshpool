@@ -8,7 +8,7 @@
 * @category  SSH
 */
 
-namespace Detain;
+namespace Detain\SshPool;
 
 class SshPool
 {
