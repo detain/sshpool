@@ -1,0 +1,21 @@
+{
+    "name": "detain/sshpool",
+    "description": "SSH command queue and connection pool runs tons of commands on a ssh host concurrently with completion callback.",
+    "type": "library",
+    "require": {
+        "ext-ssh2": "*"
+    },
+    "license": "GPL-3.0",
+    "autoload": {
+        "psr-4": {
+            "Detain\\Sshpool\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Joe Huss",
+            "email": "detain@interserver.net"
+        }
+    ],
+    "minimum-stability": "dev"
+}
