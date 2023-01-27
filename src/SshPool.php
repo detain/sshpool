@@ -85,8 +85,8 @@ class SshPool
             ]
         ];
         $callbacks = [
-            'debug' => ['Detain\SshPool','debugCallback'],
-            'disconnect' => ['Detain\SshPool', 'disconnectCallback']
+            'debug' => ['Detain\SshPool\SshPool','debugCallback'],
+            'disconnect' => ['Detain\SshPool\SshPool', 'disconnectCallback']
         ];
         // determine connections needed
         $totalConnections = count(self::$queue) > self::$maxConnections ? self::$maxConnections : count(self::$queue);
