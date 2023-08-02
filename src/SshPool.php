@@ -69,6 +69,8 @@ class SshPool
         self::$port = $port;
         self::$publicKey = $publicKey;
         self::$privateKey = $privateKey;
+        self::$pool = [];
+        self::$queue = [];
     }
 
     public static function connect() {
