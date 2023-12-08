@@ -112,11 +112,11 @@ class SshPool
                 ];
                 if (!self::$pool[$idxCon]['con'])
                     die('ipmi_live returned connection:'.var_export(self::$pool[$idxCon]['con'], true));
-                //if (!ssh2_auth_pubkey_file(self::$pool[$idxCon]['con'], self::$user, self::$publicKey, self::$privateKey)) {
-                    //echo "ssh2_auth_pubkey_file returned false\n";
+                if (!ssh2_auth_pubkey_file(self::$pool[$idxCon]['con'], self::$user, self::$publicKey, self::$privateKey)) {
+                    echo "ssh2_auth_pubkey_file returned false\n";
                     if (!ssh2_auth_password(self::$pool[$idxCon]['con'], self::$user, self::$pass))
                         die("ssh2_auth_password returned false\n");
-                //}
+                }
                 usleep(self::$connectionDelay);
             }
         }
