@@ -27,42 +27,53 @@ class SshPool
     protected static $pool = [];
     protected static $debug = false;
 
-    public static function setDebug($debug) {
+    public static function setDebug($debug)
+    {
         self::$debug = $debug;
     }
 
-    public static function setMaxConnections($maxConnections) {
+    public static function setMaxConnections($maxConnections)
+    {
         self::$maxConnections = $maxConnections;
     }
 
-    public static function addCommand($cmd, $data, $callable) {
-        if (self::$debug)
+    public static function addCommand($cmd, $data, $callable)
+    {
+        if (self::$debug) {
             echo "Adding Queued Command: {$cmd} Data:".json_encode($data)."\n";
+        }
         array_unshift(self::$queue, [$cmd, $data, $callable]);
         //self::$queue[] = [$cmd, $data, $callable];
     }
 
-    public static function disconnectCallback($reason, $message, $language) {
+    public static function disconnectCallback($reason, $message, $language)
+    {
         echo 'got disconnect callback with reason code ['.$reason.'] and message: '.$message."\n";
     }
 
-    public static function debugCallback($message, $language, $always_display) {
+    public static function debugCallback($message, $language, $always_display)
+    {
         echo 'got debug callback with message: '.$message."\n";
     }
 
-    public static function disconnect() {
-        if (self::$debug)
+    public static function disconnect()
+    {
+        if (self::$debug) {
             echo "Closing SSH Connections:";
+        }
         foreach (self::$pool as $idx => $run) {
-            if (self::$debug)
+            if (self::$debug) {
                 echo ' '.$idx;
+            }
             ssh2_disconnect($run['con']);
         }
-        if (self::$debug)
+        if (self::$debug) {
             echo " done\n";
+        }
     }
 
-    public static function init($user, $pass, $host, $port = 22, $publicKey = '', $privateKey = '') {
+    public static function init($user, $pass, $host, $port = 22, $publicKey = '', $privateKey = '')
+    {
         self::$user = $user;
         self::$pass = $pass;
         self::$host = $host;
@@ -73,7 +84,8 @@ class SshPool
         self::$queue = [];
     }
 
-    public static function connect() {
+    public static function connect()
+    {
         $methods = [
             'hostkey'=>'ssh-rsa',
             'kex' => 'diffie-hellman-group-exchange-sha256',
@@ -92,11 +104,13 @@ class SshPool
         ];
         // determine connections needed
         $totalConnections = count(self::$queue) > self::$maxConnections ? self::$maxConnections : count(self::$queue);
-        if (self::$debug)
+        if (self::$debug) {
             echo "Opening {$totalConnections} SSH Connections:";
+        }
         for ($idxCon = 0; $idxCon < $totalConnections; $idxCon++) {
-            if (self::$debug)
+            if (self::$debug) {
                 echo ' '.$idxCon;
+            }
             if (!array_key_exists($idxCon, self::$pool)) {
                 self::$pool[$idxCon] = [
                     'con' => ssh2_connect(self::$host, self::$port, $methods, $callbacks),
@@ -110,29 +124,34 @@ class SshPool
                     'data' => [],
                     'callable' => '',
                 ];
-                if (!self::$pool[$idxCon]['con'])
+                if (!self::$pool[$idxCon]['con']) {
                     die('ipmi_live returned connection:'.var_export(self::$pool[$idxCon]['con'], true));
+                }
                 if (!ssh2_auth_pubkey_file(self::$pool[$idxCon]['con'], self::$user, self::$publicKey, self::$privateKey)) {
                     echo "ssh2_auth_pubkey_file returned false\n";
-                    if (!ssh2_auth_password(self::$pool[$idxCon]['con'], self::$user, self::$pass))
+                    if (!ssh2_auth_password(self::$pool[$idxCon]['con'], self::$user, self::$pass)) {
                         die("ssh2_auth_password returned false\n");
+                    }
                 }
                 usleep(self::$connectionDelay);
             }
         }
-        if (self::$debug)
+        if (self::$debug) {
             echo " done\n";
+        }
     }
 
-    public static function fillPool() {
+    public static function fillPool()
+    {
         if (count(self::$queue) > 0) {
             foreach (self::$pool as $idx => $run) {
                 if (!$run['running']) {
                     if (count(self::$queue) > 0) {
                         // run command and store the streams and outputs
                         [self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['callable']] = array_shift(self::$queue);
-                        if (self::$debug)
+                        if (self::$debug) {
                             echo "[{$idx}] Runnning ".self::$pool[$idx]['cmd']."\n";
+                        }
                         self::$pool[$idx]['out'] = '';
                         self::$pool[$idx]['err'] = '';
                         self::$pool[$idx]['result'] = false;
@@ -153,7 +172,8 @@ class SshPool
         }
     }
 
-    public static function checkPool() {
+    public static function checkPool()
+    {
         $stillRunning = false;
         $updates = 0;
         foreach (self::$pool as $idx => $run) {
@@ -182,14 +202,17 @@ class SshPool
                     // these will not get any output
                     stream_get_contents(self::$pool[$idx]['out_stream']);
                     stream_get_contents(self::$pool[$idx]['err_stream']);
-                    if (self::$pool[$idx]['err_stream'] !== false)
+                    if (self::$pool[$idx]['err_stream'] !== false) {
                         fclose(self::$pool[$idx]['err_stream']);
-                    if (self::$pool[$idx]['out_stream'] !== false)
+                    }
+                    if (self::$pool[$idx]['out_stream'] !== false) {
                         fclose(self::$pool[$idx]['out_stream']);
+                    }
                     self::$pool[$idx]['out'] = rtrim(self::$pool[$idx]['out']);
                     self::$pool[$idx]['err'] = rtrim(self::$pool[$idx]['err']);
-                    if (self::$debug)
+                    if (self::$debug) {
                         echo "[{$idx}] Finished running '".self::$pool[$idx]['cmd']."' got '".self::$pool[$idx]['out']."'\n";
+                    }
                     // pass to callback
                     call_user_func(self::$pool[$idx]['callable'], self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['out'], self::$pool[$idx]['err']);
                     // empty the slot
@@ -200,7 +223,8 @@ class SshPool
         return [$stillRunning, $updates];
     }
 
-    public static function run() {
+    public static function run()
+    {
         // open up connections
         self::connect();
         // loop until finished
@@ -213,8 +237,9 @@ class SshPool
             // if no changes then sleep
             if ($updates == 0 && $stillRunning) {
                 usleep(self::$waitDelay);
-            } elseif (!$stillRunning)
+            } elseif (!$stillRunning) {
                 $finished = true;
+            }
         }
     }
 }
