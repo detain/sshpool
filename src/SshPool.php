@@ -188,9 +188,10 @@ class SshPool
                 // Check for timeout if it's set (non-zero)
                 if ($run['timeout'] > 0 && ($currentTime - $run['start']) > $run['timeout']) {
                     // Timeout reached, kill the connection and close streams
-                    //if (self::$debug) {
+                    echo "!";
+                    if (self::$debug) {
                         echo "[{$idx}] Timeout reached for command '".self::$pool[$idx]['cmd']."'. Killing connection.\n";
-                    //}                    
+                    }                    
                     // Close any open streams
                     if (self::$pool[$idx]['err_stream'] !== false) {
                         fclose(self::$pool[$idx]['err_stream']);
@@ -198,9 +199,11 @@ class SshPool
                     if (self::$pool[$idx]['out_stream'] !== false) {
                         fclose(self::$pool[$idx]['out_stream']);
                     }
+                    self::$pool[$idx]['out'] = rtrim(self::$pool[$idx]['out']);
+                    self::$pool[$idx]['err'] = rtrim(self::$pool[$idx]['err']);
                     ssh2_disconnect(self::$pool[$idx]['con']);
-
                     // Close the SSH connection and remove it from the pool
+                    unset($run['con']);
                     unset(self::$pool[$idx]['con']);
                     // Re-open the connection for reuse
                     self::$pool[$idx]['con'] = ssh2_connect(self::$host, self::$port);
@@ -212,11 +215,8 @@ class SshPool
                             die("ssh2_auth_password failed after reconnecting.\n");
                         }
                     }
-                    
-                    
                     // Call the callback function with timeout result
                     call_user_func(self::$pool[$idx]['callable'], self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['out'], self::$pool[$idx]['err']);
-
                     // empty the slot
                     self::$pool[$idx]['running'] = false;
                 } else {
