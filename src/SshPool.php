@@ -113,7 +113,8 @@ class SshPool
             }
             if (!array_key_exists($idxCon, self::$pool)) {
                 self::$pool[$idxCon] = [
-                    'con' => ssh2_connect(self::$host, self::$port, $methods, $callbacks),
+                    //'con' => ssh2_connect(self::$host, self::$port, $methods, $callbacks),
+                    'con' => ssh2_connect(self::$host, self::$port),
                     'running' => false,
                     'result' => false,
                     'out_stream' => false,
