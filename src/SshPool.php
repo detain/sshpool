@@ -184,14 +184,13 @@ class SshPool
         $currentTime = time();
         foreach (self::$pool as $idx => $run) {
             if ($run['running']) {
-                $stillRunning = true;
-                
+                $stillRunning = true;                
                 // Check for timeout if it's set (non-zero)
                 if ($run['timeout'] > 0 && ($currentTime - $run['start']) > $run['timeout']) {
                     // Timeout reached, kill the connection and close streams
-                    if (self::$debug) {
+                    //if (self::$debug) {
                         echo "[{$idx}] Timeout reached for command '".self::$pool[$idx]['cmd']."'. Killing connection.\n";
-                    }                    
+                    //}                    
                     // Close any open streams
                     if (self::$pool[$idx]['err_stream'] !== false) {
                         fclose(self::$pool[$idx]['err_stream']);
@@ -199,13 +198,10 @@ class SshPool
                     if (self::$pool[$idx]['out_stream'] !== false) {
                         fclose(self::$pool[$idx]['out_stream']);
                     }
+                    ssh2_disconnect(self::$pool[$idx]['con']);
+
                     // Close the SSH connection and remove it from the pool
                     unset(self::$pool[$idx]['con']);
-                    self::$pool[$idx]['running'] = false;
-                    self::$pool[$idx]['result'] = false;
-                    // Call the callback function with timeout result
-                    call_user_func(self::$pool[$idx]['callable'], self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['out'], self::$pool[$idx]['err']);
-
                     // Re-open the connection for reuse
                     self::$pool[$idx]['con'] = ssh2_connect(self::$host, self::$port);
                     if (!self::$pool[$idx]['con']) {
@@ -216,50 +212,54 @@ class SshPool
                             die("ssh2_auth_password failed after reconnecting.\n");
                         }
                     }
-
-                    usleep(self::$connectionDelay);
-                    continue; // Move on to the next pool entry
-                }
-                            
-                // update out/err
-                $eofAll = true;
-                foreach (['out', 'err'] as $io) {
-                    if (!feof(self::$pool[$idx][$io.'_stream'])) {
-                        $eofAll = false;
-                        $one = stream_get_contents(self::$pool[$idx][$io.'_stream']);
-                        if ($one === false) {
-                            $eofAll = true;
-                            break;
-                        } elseif ($one != '') {
-                            self::$pool[$idx][$io] .= $one;
-                            $updates++;
-                        }
-                    }
-                }
-                // check if ended
-                if ($eofAll) {
-                    // we need to wait for end of command
-                    stream_set_blocking(self::$pool[$idx]['out_stream'],true);
-                    stream_set_blocking(self::$pool[$idx]['err_stream'],true);
-                    // these will not get any output
-                    stream_get_contents(self::$pool[$idx]['out_stream']);
-                    stream_get_contents(self::$pool[$idx]['err_stream']);
-                    if (self::$pool[$idx]['err_stream'] !== false) {
-                        fclose(self::$pool[$idx]['err_stream']);
-                    }
-                    if (self::$pool[$idx]['out_stream'] !== false) {
-                        fclose(self::$pool[$idx]['out_stream']);
-                    }
-                    self::$pool[$idx]['out'] = rtrim(self::$pool[$idx]['out']);
-                    self::$pool[$idx]['err'] = rtrim(self::$pool[$idx]['err']);
-                    if (self::$debug) {
-                        echo "[{$idx}] Finished running '".self::$pool[$idx]['cmd']."' got '".self::$pool[$idx]['out']."'\n";
-                    }
-                    self::$pool[$idx]['stop'] = time();
-                    // pass to callback
+                    
+                    
+                    // Call the callback function with timeout result
                     call_user_func(self::$pool[$idx]['callable'], self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['out'], self::$pool[$idx]['err']);
+
                     // empty the slot
                     self::$pool[$idx]['running'] = false;
+                } else {
+                    // update out/err
+                    $eofAll = true;
+                    foreach (['out', 'err'] as $io) {
+                        if (!feof(self::$pool[$idx][$io.'_stream'])) {
+                            $eofAll = false;
+                            $one = stream_get_contents(self::$pool[$idx][$io.'_stream']);
+                            if ($one === false) {
+                                $eofAll = true;
+                                break;
+                            } elseif ($one != '') {
+                                self::$pool[$idx][$io] .= $one;
+                                $updates++;
+                            }
+                        }
+                    }
+                    // check if ended
+                    if ($eofAll) {
+                        // we need to wait for end of command
+                        stream_set_blocking(self::$pool[$idx]['out_stream'],true);
+                        stream_set_blocking(self::$pool[$idx]['err_stream'],true);
+                        // these will not get any output
+                        stream_get_contents(self::$pool[$idx]['out_stream']);
+                        stream_get_contents(self::$pool[$idx]['err_stream']);
+                        if (self::$pool[$idx]['err_stream'] !== false) {
+                            fclose(self::$pool[$idx]['err_stream']);
+                        }
+                        if (self::$pool[$idx]['out_stream'] !== false) {
+                            fclose(self::$pool[$idx]['out_stream']);
+                        }
+                        self::$pool[$idx]['out'] = rtrim(self::$pool[$idx]['out']);
+                        self::$pool[$idx]['err'] = rtrim(self::$pool[$idx]['err']);
+                        if (self::$debug) {
+                            echo "[{$idx}] Finished running '".self::$pool[$idx]['cmd']."' got '".self::$pool[$idx]['out']."'\n";
+                        }
+                        self::$pool[$idx]['stop'] = time();
+                        // pass to callback
+                        call_user_func(self::$pool[$idx]['callable'], self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['out'], self::$pool[$idx]['err']);
+                        // empty the slot
+                        self::$pool[$idx]['running'] = false;
+                    }
                 }
             }
         }
