@@ -20,7 +20,7 @@ class SshPool
     protected static $privateKey = '';
     protected static $uSecond = 1000000; // 1 second in useconds
     protected static $connectionDelay = 200000; // 2/10th of a second
-    protected static $waitDelay = 500000; // 1/2 of a second
+    protected static $waitDelay = 200000; // 1/2 of a second
     protected static $maxConnections = 200; // max number of simultanious connections
     protected static $lastConnectTime = 0; // hrtime(true) / 1000 = usleep time/microseconds
     protected static $queue = []; // queued commands
@@ -217,6 +217,7 @@ class SshPool
                     }
                     // Call the callback function with timeout result
                     call_user_func(self::$pool[$idx]['callable'], self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['out'], self::$pool[$idx]['err']);
+                    echo ($currentTime - $run['start']); 
                     // empty the slot
                     self::$pool[$idx]['running'] = false;
                 } else {
@@ -257,6 +258,7 @@ class SshPool
                         self::$pool[$idx]['stop'] = time();
                         // pass to callback
                         call_user_func(self::$pool[$idx]['callable'], self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['out'], self::$pool[$idx]['err']);
+                        echo ($currentTime - $run['start']); 
                         // empty the slot
                         self::$pool[$idx]['running'] = false;
                     }
