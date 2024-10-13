@@ -37,13 +37,13 @@ class SshPool
         self::$maxConnections = $maxConnections;
     }
 
-    public static function addCommand($cmd, $data, $callable)
+    public static function addCommand($cmd, $data, $callable, $timeout = 0)
     {
         if (self::$debug) {
             echo "Adding Queued Command: {$cmd} Data:".json_encode($data)."\n";
         }
-        array_unshift(self::$queue, [$cmd, $data, $callable]);
-        //self::$queue[] = [$cmd, $data, $callable];
+        array_unshift(self::$queue, [$cmd, $data, $callable, $timeout]);
+        //self::$queue[] = [$cmd, $data, $callable, $timeout];
     }
 
     public static function disconnectCallback($reason, $message, $language)
@@ -124,6 +124,9 @@ class SshPool
                     'cmd' => '',
                     'data' => [],
                     'callable' => '',
+                    'timeout' => 0,
+                    'start' => 0,
+                    'stop' => 0,
                 ];
                 if (!self::$pool[$idxCon]['con']) {
                     die('ipmi_live returned connection:'.var_export(self::$pool[$idxCon]['con'], true));
@@ -149,7 +152,7 @@ class SshPool
                 if (!$run['running']) {
                     if (count(self::$queue) > 0) {
                         // run command and store the streams and outputs
-                        [self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['callable']] = array_shift(self::$queue);
+                        [self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['callable'], self::$pool[$idx]['timeout']] = array_shift(self::$queue);
                         if (self::$debug) {
                             echo "[{$idx}] Runnning ".self::$pool[$idx]['cmd']."\n";
                         }
@@ -157,6 +160,7 @@ class SshPool
                         self::$pool[$idx]['err'] = '';
                         self::$pool[$idx]['result'] = false;
                         self::$pool[$idx]['running'] = true;
+                        self::$pool[$idx]['start'] = time();
                         self::$pool[$idx]['out_stream'] = ssh2_exec(self::$pool[$idx]['con'], self::$pool[$idx]['cmd']);
                         if (self::$pool[$idx]['out_stream']) {
                             self::$pool[$idx]['err_stream'] = ssh2_fetch_stream(self::$pool[$idx]['out_stream'],SSH2_STREAM_STDERR);
@@ -177,9 +181,46 @@ class SshPool
     {
         $stillRunning = false;
         $updates = 0;
+        $currentTime = time();
         foreach (self::$pool as $idx => $run) {
             if ($run['running']) {
                 $stillRunning = true;
+                
+                // Check for timeout if it's set (non-zero)
+                if ($run['timeout'] > 0 && ($currentTime - $run['start']) > $run['timeout']) {
+                    // Timeout reached, kill the connection and close streams
+                    if (self::$debug) {
+                        echo "[{$idx}] Timeout reached for command '".self::$pool[$idx]['cmd']."'. Killing connection.\n";
+                    }                    
+                    // Close any open streams
+                    if (self::$pool[$idx]['err_stream'] !== false) {
+                        fclose(self::$pool[$idx]['err_stream']);
+                    }
+                    if (self::$pool[$idx]['out_stream'] !== false) {
+                        fclose(self::$pool[$idx]['out_stream']);
+                    }
+                    // Close the SSH connection and remove it from the pool
+                    unset(self::$pool[$idx]['con']);
+                    self::$pool[$idx]['running'] = false;
+                    self::$pool[$idx]['result'] = false;
+                    // Call the callback function with timeout result
+                    call_user_func(self::$pool[$idx]['callable'], self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['out'], self::$pool[$idx]['err']);
+
+                    // Re-open the connection for reuse
+                    self::$pool[$idx]['con'] = ssh2_connect(self::$host, self::$port);
+                    if (!self::$pool[$idx]['con']) {
+                        die('Failed to reconnect after timeout.');
+                    }
+                    if (!ssh2_auth_pubkey_file(self::$pool[$idx]['con'], self::$user, self::$publicKey, self::$privateKey)) {
+                        if (!ssh2_auth_password(self::$pool[$idx]['con'], self::$user, self::$pass)) {
+                            die("ssh2_auth_password failed after reconnecting.\n");
+                        }
+                    }
+
+                    usleep(self::$connectionDelay);
+                    continue; // Move on to the next pool entry
+                }
+                            
                 // update out/err
                 $eofAll = true;
                 foreach (['out', 'err'] as $io) {
@@ -214,6 +255,7 @@ class SshPool
                     if (self::$debug) {
                         echo "[{$idx}] Finished running '".self::$pool[$idx]['cmd']."' got '".self::$pool[$idx]['out']."'\n";
                     }
+                    self::$pool[$idx]['stop'] = time();
                     // pass to callback
                     call_user_func(self::$pool[$idx]['callable'], self::$pool[$idx]['cmd'], self::$pool[$idx]['data'], self::$pool[$idx]['out'], self::$pool[$idx]['err']);
                     // empty the slot
