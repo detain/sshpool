@@ -369,7 +369,7 @@ class SshPool
                 $exitStatus = $metadata['exit_status'] ?? -1;
                 $this->stdout[$id] = rtrim(str_replace("\r", '', $this->stdout[$id]));
                 $this->stderr[$id] = rtrim(str_replace("\r", '', $this->stderr[$id]));
-                echo ($currentTime - $streams['start_time']);
+                //echo ($currentTime - $streams['start_time']);
                 $this->handleCommandCompletion($id, $cmd, $retries, $exitStatus);
             }
         }
