@@ -198,7 +198,7 @@ class SshPool
     public function connect() {
         $this->conn = ssh2_connect($this->host, $this->port, ['hostkey' => 'ssh-rsa']);
         if (!$this->conn || !ssh2_auth_pubkey_file($this->conn, $this->user, $this->pubKey, $this->privKey)) {
-            throw new Exception("SSH connection or authentication failed");
+            throw new \Exception("SSH connection or authentication failed");
         }
     }
 
@@ -299,7 +299,7 @@ class SshPool
             }
         }
         if ($once === false) {
-            echo "All commands completed in " . (time() - $this->startTime) . " seconds.\n";
+            //echo "All commands completed in " . (time() - $this->startTime) . " seconds.\n";
             return true;
         }
         return !(!empty($this->queueAfter) || !empty($this->cmdQueue) || !empty($this->running));
