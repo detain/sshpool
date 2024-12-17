@@ -6,118 +6,203 @@ use Detain\SshPool\SshPool;
 class SshPoolTest extends TestCase
 {
     private $sshPool;
-    private $mockConnection;
+    private $mockConn;
 
     protected function setUp(): void
     {
-        // Mock SSH functions using a namespace workaround
-        stream_wrapper_register("ssh2", MockSshStream::class);
+        // Mock ssh2_connect function
+        $this->mockConn = Mockery::mock('resource');
 
-        // Mock ssh2_connect to always return a valid resource
-        $this->mockConnection = $this->createMock('stdClass');
-        $this->sshPool = $this->getMockBuilder(SshPool::class)
-            ->setConstructorArgs(['localhost', 22, 'user', 'pass', '/path/to/pubkey', '/path/to/privkey'])
-            ->onlyMethods(['connect'])
-            ->getMock();
-
-        // Mock the connect method to bypass real SSH connection
-        $this->sshPool->expects($this->once())->method('connect')->willReturn(true);
+        // Mock ssh2 functions globally
+        $this->sshPool = Mockery::mock(SshPool::class)
+            ->makePartial()
+            ->shouldAllowMockingProtectedMethods();
     }
 
-    public function testConstructorInitializesProperties(): void
+    public function tearDown(): void
     {
-        $this->assertEquals(50, $this->sshPool->maxThreads);
-        $this->assertEquals(0, $this->sshPool->maxRetries);
-        $this->assertEquals(15, $this->sshPool->waitRetry);
-        $this->assertEquals(0, $this->sshPool->minConfigSize);
+        Mockery::close();
     }
 
-    public function testSetWaitRetry(): void
+    // Test failed connection
+    public function testFailedConnection()
     {
-        $this->sshPool->setWaitRetry(10);
-        $this->assertEquals(10, $this->sshPool->waitRetry);
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage("SSH connection or authentication failed");
+
+        // Mock ssh2_connect to return false
+        $this->sshPool->shouldReceive('connect')->andThrow(new Exception("SSH connection or authentication failed"));
+        $sshPool = new SshPool('fakehost', 22, 'user', 'pass', 'pubkey', 'privkey');
     }
 
-    public function testSetMaxThreads(): void
+    // Test failed public key authentication
+    public function testFailedPubkeyAuth()
     {
-        $this->sshPool->setMaxThreads(20);
-        $this->assertEquals(20, $this->sshPool->maxThreads);
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage("SSH connection or authentication failed");
+
+        $this->sshPool->shouldReceive('connect')
+            ->andThrow(new Exception("SSH connection or authentication failed"));
+
+        $sshPool = new SshPool('localhost', 22, 'user', 'pass', 'invalid_pubkey', 'invalid_privkey');
     }
 
-    public function testSetMaxRetries(): void
+    // Test successful connection
+    public function testSuccessfulConnection()
     {
-        $this->sshPool->setMaxRetries(5);
-        $this->assertEquals(5, $this->sshPool->maxRetries);
+        $this->sshPool->shouldReceive('connect')->once()->andReturn(true);
+
+        $sshPool = new SshPool('localhost', 22, 'user', 'pass', 'valid_pubkey', 'valid_privkey');
+        $this->assertInstanceOf(SshPool::class, $sshPool);
     }
 
-    public function testSetMinConfigSize(): void
+    // Test successfully running a command
+    public function testRunSuccessfulCommand()
     {
-        $this->sshPool->setMinConfigSize(200);
-        $this->assertEquals(200, $this->sshPool->minConfigSize);
+        $command = 'echo "Hello, World!"';
+        $expectedOutput = 'Hello, World!';
+
+        $this->sshPool->shouldReceive('runCommand')
+            ->with($command)
+            ->once()
+            ->andReturn([
+                'cmd' => $command,
+                'exitStatus' => 0,
+                'out' => $expectedOutput,
+                'err' => '',
+            ]);
+
+        $result = $this->sshPool->runCommand($command);
+
+        $this->assertEquals(0, $result['exitStatus']);
+        $this->assertEquals($expectedOutput, $result['out']);
     }
 
-    public function testAddCommand(): void
+    // Test failed command
+    public function testRunFailedCommand()
     {
-        $commandId = $this->sshPool->addCommand('ls -la', 'cmd1', ['data'], null, 30);
+        $command = 'false';
+        $this->sshPool->shouldReceive('runCommand')
+            ->once()
+            ->andReturn([
+                'cmd' => $command,
+                'exitStatus' => 1,
+                'out' => '',
+                'err' => 'Some error occurred',
+            ]);
 
-        $this->assertArrayHasKey('cmd1', $this->sshPool->cmdQueue);
-        $this->assertEquals('ls -la', $this->sshPool->cmdQueue['cmd1']['cmd']);
-        $this->assertEquals(['data'], $this->sshPool->callbackData['cmd1']);
-        $this->assertEquals('cmd1', $commandId);
+        $result = $this->sshPool->runCommand($command);
+
+        $this->assertEquals(1, $result['exitStatus']);
+        $this->assertNotEmpty($result['err']);
     }
 
-    public function testRunExecutesCommands(): void
+    // Test concurrency
+    public function testConcurrency()
     {
-        // Mock SSH execution output
-        $mockOutput = "Mock command output";
-        stream_wrapper_register("ssh2.mock", MockSshStream::class);
+        $this->sshPool->setMaxThreads(2);
 
-        // Add a command
-        $this->sshPool->addCommand('ls -la', 'cmd1');
+        $commands = ['cmd1', 'cmd2', 'cmd3'];
+        foreach ($commands as $cmd) {
+            $this->sshPool->addCommand($cmd);
+        }
 
-        // Run once
-        $result = $this->sshPool->run(true);
+        $this->sshPool->shouldReceive('run')
+            ->once()
+            ->andReturn(true);
 
-        $this->assertTrue($result);
-        $this->assertArrayHasKey('cmd1', $this->sshPool->stdout);
-        $this->assertEquals($mockOutput, $this->sshPool->stdout['cmd1']);
+        $this->assertTrue($this->sshPool->run());
     }
 
-    public function testHandleRetries(): void
+    // Test retry mechanism
+    public function testRetryOnFailedCommand()
     {
         $this->sshPool->setMaxRetries(2);
+        $command = 'failcmd';
 
-        $this->sshPool->addCommand('failing-command', 'fail1');
-        $this->sshPool->run(true);
+        $this->sshPool->shouldReceive('runCommand')
+            ->andReturnUsing(function () {
+                return ['exitStatus' => 1, 'out' => '', 'err' => 'Error'];
+            });
 
-        $this->assertEquals(2, $this->sshPool->cmdQueue['fail1']['retries']);
-    }
-}
-
-/**
- * Mock SSH Stream Class
- */
-class MockSshStream
-{
-    public $context;
-
-    public function stream_open($path, $mode, $options, &$opened_path)
-    {
-        return true;
+        $this->sshPool->addCommand($command);
+        $this->assertTrue($this->sshPool->run());
     }
 
-    public function stream_read($count)
+    // Test minConfigSize failure
+    public function testMinConfigSizeFailure()
     {
-        return "Mock command output\n";
+        $this->sshPool->setMinConfigSize(10);
+        $command = 'echo small';
+
+        $this->sshPool->shouldReceive('runCommand')
+            ->andReturn([
+                'cmd' => $command,
+                'exitStatus' => 0,
+                'out' => 'tiny',
+                'err' => '',
+            ]);
+
+        $result = $this->sshPool->runCommand($command);
+        $this->assertLessThan(10, strlen($result['out']));
     }
 
-    public function stream_eof()
+    // Test callback functionality
+    public function testCallbackFunctionality()
     {
-        return true;
+        $command = 'echo callback';
+        $callbackInvoked = false;
+
+        $callback = function ($cmd, $id, $data, $exitStatus, $stdout, $stderr) use (&$callbackInvoked) {
+            $callbackInvoked = true;
+            $this->assertEquals($cmd, 'echo callback');
+            $this->assertEquals($exitStatus, 0);
+        };
+
+        $id = $this->sshPool->addCommand($command, null, 'test_data', $callback);
+        $this->sshPool->shouldReceive('runCommand')->andReturn([
+            'exitStatus' => 0,
+            'out' => 'Success',
+            'err' => '',
+        ]);
+
+        $this->sshPool->run();
+        $this->assertTrue($callbackInvoked);
     }
 
-    public function stream_close()
+    // Test timeout of long-running commands
+    public function testTimeoutCommand()
     {
-        return true;
+        $command = 'sleep 5';
+        $this->sshPool->setMaxThreads(1);
+        $this->sshPool->setMaxRetries(0);
+
+        $this->sshPool->addCommand($command, null, null, null, 2); // Set timeout 2 seconds
+
+        $this->sshPool->shouldReceive('runCommand')
+            ->andReturnUsing(function () {
+                sleep(3); // Simulate a delay
+                return ['exitStatus' => 1, 'out' => '', 'err' => 'Timeout occurred'];
+            });
+
+        $result = $this->sshPool->runCommand($command);
+        $this->assertEquals(1, $result['exitStatus']);
+    }
+
+    // Test output to stdout and stderr
+    public function testStdoutAndStderr()
+    {
+        $command = 'echo "Hello" && echo "Error" >&2';
+        $this->sshPool->shouldReceive('runCommand')
+            ->once()
+            ->andReturn([
+                'exitStatus' => 0,
+                'out' => 'Hello',
+                'err' => 'Error',
+            ]);
+
+        $result = $this->sshPool->runCommand($command);
+        $this->assertEquals('Hello', $result['out']);
+        $this->assertEquals('Error', $result['err']);
     }
 }

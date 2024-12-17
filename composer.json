@@ -6,7 +6,8 @@
         "ext-ssh2": "*"
     },
     "require-dev": {
-        "phpunit/phpunit": "*"
+        "phpunit/phpunit": "*",
+        "mockery/mockery": "*"
     },
     "license": "GPL-3.0",
     "autoload": {
