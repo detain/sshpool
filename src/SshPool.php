@@ -320,11 +320,17 @@ class SshPool
         while (!(feof($streamOut) && feof($streamErr))) {
             $respOut = stream_get_contents($streamOut);
             $respErr = stream_get_contents($streamErr);
+            $updated = false;
             if ($respOut !== false && $respOut !== '') {
                 $stdOut .= $respOut;
+                $updated = true;
             }
             if ($respErr !== false && $respErr !== '') {
                 $stdErr .= $respErr;
+                $updated = true;
+            }
+            if ($updated === false) {
+                usleep(25000);
             }
         }
         stream_set_blocking($streamOut, true);
