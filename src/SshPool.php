@@ -58,7 +58,7 @@ class SshPool
     * Maximum number of retry attempts for failed commands.
     * @var int
     */
-    public int $maxRetries = 3;
+    public int $maxRetries = 0;
 
     /**
     * Delay in seconds between retry attempts.
