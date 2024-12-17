@@ -305,6 +305,43 @@ class SshPool
         return !(!empty($this->queueAfter) || !empty($this->cmdQueue) || !empty($this->running));
     }
 
+    public function runCommand(string $cmd)
+    {
+        $streamOut = ssh2_exec($this->conn, $cmd, 'vt100');
+        if (!$streamOut) {
+            $this->adjustThreads($id);
+            return false;
+        }
+        $stdOut = '';
+        $stdErr = '';
+        $streamErr = ssh2_fetch_stream($streamOut, SSH2_STREAM_STDERR);
+        stream_set_blocking($streamOut, false);
+        stream_set_blocking($streamErr, false);
+        while (!(feof($streamOut) && feof($streamErr))) {
+            $respOut = stream_get_contents($streamOut);
+            $respErr = stream_get_contents($streamErr);
+            if ($respOut !== false && $respOut !== '') {
+                $stdOut .= $respOut;
+            }
+            if ($respErr !== false && $respErr !== '') {
+                $stdErr .= $respErr;
+            }
+        }
+        stream_set_blocking($streamOut, true);
+        $metadata = stream_get_meta_data($streamOut);
+        fclose($streamOut);
+        fclose($streamErr);
+        $exitStatus = $metadata['exit_status'] ?? -1;
+        $stdOut = rtrim(str_replace("\r", '', $stdOut));
+        $stdErr = rtrim(str_replace("\r", '', $stdErr));
+        return [
+            'cmd' => $cmd,
+            'exitStatus' => $exitStatus,
+            'out' => $stdOut,
+            'err' => $stdErr,
+        ];
+    }
+
     /**
     * Sets up streams for a command and starts its execution.
     *
