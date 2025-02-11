@@ -196,7 +196,9 @@ class SshPool
     * @throws Exception If SSH connection or authentication fails.
     */
     public function connect() {
-        $this->conn = ssh2_connect($this->host, $this->port, ['hostkey' => 'ssh-rsa']);
+        
+        $methods = ['hostkey' => 'ssh-rsa'];
+        $this->conn = ssh2_connect($this->host, $this->port, $methods);
         if (!$this->conn || !ssh2_auth_pubkey_file($this->conn, $this->user, $this->pubKey, $this->privKey)) {
             throw new \Exception("SSH connection or authentication failed");
         }
