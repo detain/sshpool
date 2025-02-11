@@ -257,7 +257,7 @@ class SshPool
     * @param int $timeout Optional command timeout in seconds; 0 for no timeout.
     * @return string The command ID.
     */
-    public function addCommand(string $cmd, ?string $id = null, mixed $data = null, ?callable $callback = null, int $timeout = 0): string
+    public function addCommand(string $cmd, ?string $id = null, $data = null, ?callable $callback = null, int $timeout = 0): string
     {
         if (is_null($id)) {
             $id = uniqid();
