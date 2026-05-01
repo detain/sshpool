@@ -1,5 +1,8 @@
 /vendor/
 composer.lock
 
+# PHPUnit cache
+/.phpunit.cache/
+
 # Caliber local state
 .caliber/

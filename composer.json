@@ -15,6 +15,15 @@
             "Detain\\SshPool\\": "src/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Detain\\SshPool\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test-coverage": "phpunit --coverage-text"
+    },
     "authors": [
         {
             "name": "Joe Huss",
