@@ -10,6 +10,26 @@
         "mockery/mockery": "*"
     },
     "license": "GPL-3.0",
+    "keywords": [
+        "ssh",
+        "connection-pool",
+        "async",
+        "async-php",
+        "reactphp",
+        "concurrency",
+        "parallel",
+        "non-blocking",
+        "event-loop",
+        "worker-pool",
+        "multiplex",
+        "ssh-connection-pool",
+        "async-ssh",
+        "channel",
+        "stream-select",
+        "high-concurrency",
+        "php",
+        "php-library"
+    ],
     "autoload": {
         "psr-4": {
             "Detain\\SshPool\\": "src/"
