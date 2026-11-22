@@ -17,6 +17,8 @@
  * - Per-command completion callbacks with access to output data.
  * - Defers retry attempts until a specified time has passed.
  * - Public/private key authentication.
+ * - Shared relay host-key policy (algorithm allowlist + accept-new
+ *   fingerprint verification, B025) enforced before auth.
  * - Optional minimum stdout size to validate command success.
  *
  * Usage:
@@ -209,6 +211,8 @@ class SshPool
      * @param string                $pubKey  Path to the public key file.
      * @param string                $privKey Path to the private key file.
      * @param array<string, mixed>  $methods Optional ssh2_connect() methods array (key exchange, hostkey, etc).
+     *                                       A missing 'hostkey' filter is filled with the shared
+     *                                       RelayHostKeyPolicy allowlist (B025); caller-supplied values win.
      *
      * @throws \Exception When the SSH connection or authentication fails.
      */
@@ -233,25 +237,71 @@ class SshPool
     }
 
     /**
-     * Establishes the SSH connection and authenticates with the configured
-     * public/private key pair.
+     * Named constructor for the switch-management relay (B025).
+     *
+     * Reads the same `CLOGIN_SSH_*` estate constants {@see \Detain\Sshwitch\Sshwitch}
+     * targets (see scripts/Networking/update_switch_locations.php:80 for the
+     * historical duplicate-args call shape this replaces), so every door to
+     * the relay shares one host:port, one key pair and — via connect() — one
+     * {@see RelayHostKeyPolicy} host-key check.
+     *
+     * @return self
+     *
+     * @throws \Exception When the SSH connection, host-key policy or authentication fails.
+     */
+    public static function forRelay(): self
+    {
+        return new self(
+            CLOGIN_SSH_HOST,
+            (int) CLOGIN_SSH_PORT,
+            CLOGIN_SSH_USER,
+            '',
+            CLOGIN_SSH_KEY . '.pub',
+            CLOGIN_SSH_KEY
+        );
+    }
+
+    /**
+     * Establishes the SSH connection, enforces the shared relay host-key
+     * policy (B025) before authenticating, and authenticates with the
+     * configured public/private key pair.
+     *
+     * Formerly this was the "unpinned door": a bare ssh2_connect() with no
+     * algorithm restriction and no fingerprint check. Both gaps close through
+     * {@see RelayHostKeyPolicy}.
      *
      * @return void
      *
      * @throws \Exception When the SSH connection or authentication fails.
+     * @throws \RuntimeException When the peer host key fails the policy.
      */
     public function connect(): void
     {
-        $this->conn = empty($this->methods)
-            ? ssh2_connect($this->host, $this->port)
-            : ssh2_connect($this->host, $this->port, $this->methods);
+        $this->conn = ssh2_connect($this->host, $this->port, $this->connectMethods());
         if (!$this->conn) {
             throw new \Exception("SSH connection failed to {$this->host}:{$this->port}");
+        }
+        try {
+            RelayHostKeyPolicy::verify($this->conn, $this->host, $this->port);
+        } catch (\Throwable $e) {
+            $this->conn = null;
+            throw $e;
         }
         if (!ssh2_auth_pubkey_file($this->conn, $this->user, $this->pubKey, $this->privKey)) {
             $this->conn = null;
             throw new \Exception("SSH connection or authentication failed");
         }
+    }
+
+    /**
+     * Compose the ssh2_connect() methods array for this pool: caller-supplied
+     * methods merged with the shared host-key allowlist (B025).
+     *
+     * @return array<string, mixed>
+     */
+    protected function connectMethods(): array
+    {
+        return RelayHostKeyPolicy::connectMethods($this->methods);
     }
 
     /**

@@ -118,14 +118,18 @@ while (!$done) {
 
 ### Custom SSH connection methods
 
-`ssh2_connect()` accepts an algorithm/method override array. Pass it
-through the constructor's seventh argument when, for example, you need
-to whitelist a deprecated host key algorithm against a legacy server:
+`ssh2_connect()` accepts an algorithm/method override array. Since B025 the
+default already supplies the shared `RelayHostKeyPolicy::HOSTKEY_ALGORITHMS`
+allowlist (rsa-sha2-512/256 first, ssh-rsa only as legacy fallback) and every
+connection is fingerprint-verified before auth. Pass the seventh constructor
+argument only to deliberately override that — e.g. pinning a single algorithm
+against a legacy server; a caller-supplied `hostkey` value wins over the
+default:
 
 ```php
 $pool = new SshPool(
     $host, 22, $user, '', $pub, $priv,
-    ['hostkey' => 'ssh-rsa']
+    ['hostkey' => 'ssh-ed25519'] // deliberate single-algorithm pin
 );
 ```
 

@@ -9,7 +9,7 @@ description: Codifies SshPool constructor and connect() pubkey auth patterns fro
 - **Requires `ext-ssh2`** — verify it is installed (`php -m | grep ssh2`) before writing any code. Without it, `ssh2_connect` is undefined.
 - **Never use password-only auth** — this skill covers pubkey auth only. Both `$pubKey` and `$privKey` file paths must be provided and must exist on disk.
 - **`connect()` throws on failure** — always wrap instantiation in `try/catch(\Exception $e)` at the call site.
-- The `$methods` array passed to `ssh2_connect()` must always include `['hostkey' => 'ssh-rsa']` — do not omit it.
+- Since B025 the default `connectMethods()` already supplies the shared `RelayHostKeyPolicy` host-key allowlist and fingerprint verification before auth — do **not** hand-pin a single legacy algorithm; pass `hostkey` in `$methods` only for a deliberate, documented override (caller value wins).
 
 ## Instructions
 

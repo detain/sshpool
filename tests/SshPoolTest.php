@@ -13,6 +13,7 @@
 
 namespace Detain\SshPool\Tests;
 
+use Detain\SshPool\RelayHostKeyPolicy;
 use Detain\SshPool\SshPool;
 use Detain\SshPool\Tests\Fixtures\FakeSshPool;
 use PHPUnit\Framework\TestCase;
@@ -308,5 +309,52 @@ class SshPoolTest extends TestCase
         $pool->run();
         $this->assertArrayNotHasKey($id, $pool->callbacks);
         $this->assertArrayNotHasKey($id, $pool->callbackData);
+    }
+
+    // ---- B025: connect() methods seam + named relay constructor ---------
+
+    /**
+     * Invoke the protected connectMethods() seam on a pool instance.
+     *
+     * @param array<string, mixed> $methods value to install into the private property
+     * @return array<string, mixed>
+     */
+    private function seamConnectMethods(array $methods): array
+    {
+        $pool = $this->newPool();
+        $prop = new \ReflectionProperty(SshPool::class, 'methods');
+        $prop->setAccessible(true);
+        $prop->setValue($pool, $methods);
+        $seam = new \ReflectionMethod(SshPool::class, 'connectMethods');
+        $seam->setAccessible(true);
+        return $seam->invoke($pool);
+    }
+
+    public function testConnectMethodsSeamSuppliesHostKeyAllowlist(): void
+    {
+        $methods = $this->seamConnectMethods([]);
+        $this->assertSame(RelayHostKeyPolicy::HOSTKEY_ALGORITHMS, $methods['hostkey'], 'B025: bare ssh2_connect door must close');
+    }
+
+    public function testConnectMethodsSeamPreservesCallerOverride(): void
+    {
+        $methods = $this->seamConnectMethods(['hostkey' => 'ssh-ed25519', 'client-username' => 'bob']);
+        $this->assertSame('ssh-ed25519', $methods['hostkey']);
+        $this->assertSame('bob', $methods['client-username']);
+    }
+
+    public function testForRelayIsStaticNamedConstructor(): void
+    {
+        $method = new \ReflectionMethod(SshPool::class, 'forRelay');
+        $this->assertTrue($method->isStatic(), 'B025: forRelay() is the shared relay door');
+        $this->assertSame('self', (string) $method->getReturnType());
+    }
+
+    public function testForRelaySourceWiredToCloginConstants(): void
+    {
+        $src = file_get_contents(dirname(__DIR__) . '/src/SshPool.php');
+        $this->assertStringContainsString('CLOGIN_SSH_HOST', $src);
+        $this->assertStringContainsString("CLOGIN_SSH_KEY . '.pub'", $src);
+        $this->assertStringContainsString('RelayHostKeyPolicy::verify', $src, 'connect() must verify the host key before auth');
     }
 }
